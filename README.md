@@ -1,2 +1,2 @@
-# software_networking_labs
+# Labs for Software Networking course at POLITO
 Labs for software networking course at POLITO
