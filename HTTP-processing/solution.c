@@ -100,7 +100,10 @@ int main(int argc, char **argv)
     }
 
     /* start the capture */
-    pcap_loop(adhandle, 0, packet_handler, NULL);
+    result = pcap_loop(adhandle, 0, packet_handler, NULL);
+    if (result == -1) {
+        printf("Error reading the packets: %s\n", pcap_geterr(adhandle));
+    }
 
     pcap_close(adhandle);
     return 0;
