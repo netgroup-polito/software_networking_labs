@@ -148,8 +148,14 @@ crownlabs@netlab:~$ gcc pcap_skeleton.c -lpcap -o pcap_skeleton
 
 where `-o pcap_skeleton` creates an executable named `pcap_skeleton` in your local folder.
 
-The program can be started with the name of a network interface as first parameter, e.g., `enp1s0`, and remembering that packet capture programs require administrative privileges (i.e., `sudo`), such as in the following example:
+The program can be started with the name of a network interface as first parameter, e.g., `enp2s0`, and remembering that packet capture programs require administrative privileges (i.e., `sudo`), such as in the following example:
 
 ```console
-crownlabs@netlab:~$ sudo ./pcap_skeleton enp1s0
+crownlabs@netlab:~$ sudo ./pcap_skeleton enp2s0
+```
+
+Finally, to generate HTTP traffic, you can simply use the `curl` command line program from a Linux terminal executed on the same machine where the capture program is running, as follows:
+
+```console
+crownlabs@netlab:~$ curl www.cnn.com/weather
 ```
