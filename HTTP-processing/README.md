@@ -24,7 +24,7 @@ As a starting point, use the following minimal, running example.
 ```c
 #include <stdio.h>            /* Standard C include file for I/O functions */
 #include <time.h>             /* Include file for time manipulation functions */
-#include <linux/if_ether.h>   /* Definition of the 'ethhdr' structure */
+#include <net/ethernet.h>     /* Definition of the 'ether_header' structure */
 #include <pcap.h>             /* Include files for libpcap functions */
 
 /* Prototype of the packet handler */
@@ -71,32 +71,34 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
     struct tm *tm;
     char timestr[32];
     time_t local_tv_sec;
-    struct ethhdr *ethptr;
+    struct ether_header *ethptr;
 
     /* Cast the packet buffer into a pointer to an Ethernet frame */
-    ethptr = (struct ethhdr *) pkt_data;
+    ethptr = (struct ether_header *) pkt_data;
 
     /* Convert the timestamp to a readable format */
     local_tv_sec = header->ts.tv_sec;
     tm= localtime(&local_tv_sec);
     strftime(timestr, sizeof timestr, "%Y-%m-%d %H:%M:%S", tm);
 
-    printf("%s.%.6ld len:%d - ", timestr, header->ts.tv_usec, header->len);
+    printf("%s.%.6ld (len %d) - ", timestr, header->ts.tv_usec, header->len);
 
-    if (ntohs(ethptr->h_proto) == 0x800)
-        printf("IP packet\n");
-    else
-        printf("!IP packet\n"); 
+    switch (ntohs(ethptr->ether_type))
+    {
+        case 0x800: printf("IP\n"); break;
+        case 0x806: printf("ARP\n"); break;
+        case 0x86dd: printf("IP6\n"); break;
+        default: printf("Unknown\n"); break;
+    }
 }
-
 ```
 
 ### Step 2: Add HTTP parsing
 
 In this second step, add the code that checks if the TCP destination port of the packet is equal to `80`.
 In this case:
-  - Check if the packet contains an HTTP request (e.g., a `POST`/`GET` command);
-  - In this case, extract the URL contained in the packet (e.g., `www.cnn.com/weather`) and print it on screen, after the data mentioned before.
+- Check if the packet contains an HTTP request (e.g., a `POST`/`GET` command);
+- In this case, extract the URL contained in the packet (e.g., `www.cnn.com/weather`) and print it on screen, after the data mentioned before.
 
 Please note that the URI of an HTTP request message can be specified in different forms (e.g., absolute URI, absolute path, etc.) and some of them may refer to the `Host` header field.
 For the purpose of this exercise the student is asked to print on screen a single line that concatenates the text present in the `Host` field with the URL contained on the `Request` line, such as:
@@ -105,9 +107,14 @@ For the purpose of this exercise the student is asked to print on screen a singl
 www.cnn.com/weather
 ```
 
-### Step 3 (optional): parse the message across multiple HTTP packets
+### Step 3 (optional): print HTTP Request and Response
 
-The student is suggested to complete the same exercise by considering that the HTTP payload can be split across multiple packets.
+In this third step, modify the previous exercise as follows:
+- add a BPF filter to your program, so that it captures only TCP packets to/from TCP port 80
+- print, within the same printf() on screen, both the HTTP request and the corresponding response coming from the server.
+
+This requires keeping track of the established HTTP connections, and print on screen only when the response to a given request is received by the host.
+
 
 ## 2. Documentation and additional suggestions
 
@@ -118,8 +125,10 @@ Focusing on Linux, remember that you need to install also the development librar
 
 ### 2.2 Documentation for the libpcap API
 
-A rather complete documentation of the `libpcap` capture library is available on the WinPcap website, which includes also programming samples, at the following address: <https://www.winpcap.org/docs/docs_412/html/main.html>.
-Although some new APIs have been added recently (e.g., `pcap_create()`, `pcap_activate()` and more, replacing existing functions such as `pcap_open_live()`), this documentation still uses the "old" API, which looks more compact and is still preferred nowadays.
+A complete documentation of the `libpcap` capture library is available on the `tcpdump` website at the following address: <https://www.tcpdump.org/manpages/pcap.3pcap.html>.
+A nice primer about creating a packet capture program with `libpcap` is available on the same website: <https://www.tcpdump.org/pcap.html>.
+Additional programming samples are available at the old WinPcap website: <https://www.winpcap.org/docs/docs_412/html/main.html>.
+However, this website is no longer maintained and it can disappear at any time in the future.
 
 ### 2.3 Reading the packet data
 
