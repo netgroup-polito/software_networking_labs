@@ -1,21 +1,25 @@
 # HTTP Processing with libpcap
 
-## 1. Lab text
+## 1. Goal of the lab
 
-This lab is divided in three steps.
+Given a computer equipped with a packet capture library (e.g., `libpcap`), write a C program that parses the packet and extracts minimal information.
 
-### Step 1: basic header parsing
+This lab is divided in three steps of increasing complexity.
 
-Given a computer equipped with a packet capture library (e.g., `libpcap`), write a program in C/C++ language that:
+### Step 1: Parsing of standard protocol headers
 
-- Captures all the packets generated and received by the host;
-- Writes, per each packet, a single line on screen reporting the following information (in case some information is not available, such as the PORT in case of a packet that is neither UDP nor TCP, please leave the field blank):
+In this first step, the program must:
+
+- Capture all the packets generated and received by the host;
+- Write, per each packet, a single line on screen reporting the following information:
 
   ```
   timestamp  MAC_src -> MAC_dst  IP_src -> IP_dst  Protocol  PORT_src -> PORT_dst
   ```
 
-As a starting point, use the following minimal, running example in `libpcap`.
+In case some information is not available, such as the PORT in case of a packet that is neither UDP nor TCP, please leave the field blank.
+
+As a starting point, use the following minimal, running example.
 
 ```c
 #include <stdio.h>            /* Standard C include file for I/O functions */
