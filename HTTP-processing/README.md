@@ -5,7 +5,7 @@
 Given a computer equipped with a packet capture library (e.g., `libpcap`), write a program in C/C++ language that:
 
 - Captures all the packets generated and received by the host;
-- Writes, per each packet, a single line on screen reporting the following information (in case some information are not available, such as the PORT in case of a packet that is neither UDP nor TCP, please leave the field blank):
+- Writes, per each packet, a single line on screen reporting the following information (in case some information is not available, such as the PORT in case of a packet that is neither UDP nor TCP, please leave the field blank):
 
   ```
   timestamp  MAC_src -> MAC_dst  IP_src -> IP_dst  Protocol  PORT_src -> PORT_dst
@@ -13,7 +13,7 @@ Given a computer equipped with a packet capture library (e.g., `libpcap`), write
 
 - Checks if the TCP destination port of the packet is equal to `80`; in this case:
   - Check if the packet contains an HTTP request (e.g., a `POST`/`GET` command);
-  - In this case, extracts the URL contained in the packet (e.g., `www.cnn.com/weather`) and print it on screen, after the data mentioned before.
+  - In this case, extract the URL contained in the packet (e.g., `www.cnn.com/weather`) and print it on screen, after the data mentioned before.
 
 Please note that the URI of an HTTP request message can be specified in different forms (e.g., absolute URI, absolute path, etc.) and some of them may refer to the `Host` header field.
 For the purpose of this exercise the student is asked to print on screen a single line that concatenates the text present in the `Host` field with the URL contained on the `Request` line, such as:
@@ -60,7 +60,7 @@ Therefore it is likely that your program will receive packets that exceed the 15
 ### 2.6 Packet size and captured data
 
 Remember that your code always needs to check if the given offset in the packet is valid before loading data from the packet buffer.
-This can be done by checking that the actual offset is less than the packet length (or, better, the captured lenght).
+This can be done by checking that the actual offset is less than the packet length (or, better, the captured length).
 In fact, in some cases only a snapshot of the packet is captured and brought to the user-level program, which requires the software to perform the previous check against the *captured length* variable, instead of the *packet length* one.
 
 Both variables are available as part of the `struct pcap_pkthdr` defined by the libpcap library.
@@ -90,12 +90,12 @@ int main(int argc, char **argv)
     }
 
     /* Open the capture device */
-    if ( (adhandle= pcap_open_live(argv[1],     // name of the device
-                              65536,            // portion of the packet to capture
-                                                // 65536 guarantees that the whole packet is captured
-                              PCAP_OPENFLAG_PROMISCUOUS,    // promiscuous mode
-                              1000,             // read timeout, 1 second
-                              errbuf            // error buffer
+    if ( (adhandle= pcap_open_live(argv[1],  // name of the device
+                              65536,         // portion of the packet to capture
+                                             // Warning: with GRO, IP packets can be even larger
+                              1,             // promiscuous mode
+                              1000,          // read timeout, 1 second
+                              errbuf         // error buffer
                               ) ) == NULL)
     {
         fprintf(stderr,"Unable to open the adapter: either %s is not supported by libpcap, ", argv[1]);
@@ -140,7 +140,7 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
 
 ```
 
-Assuming the the above source code is saved in file `pcap_skeleton.c`, the above example can be compiled with this command:
+Assuming the above source code is saved in file `pcap_skeleton.c`, the above example can be compiled with this command:
 
 ```console
 crownlabs@netlab:~$ gcc pcap_skeleton.c -lpcap -o pcap_skeleton
