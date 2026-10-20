@@ -2,11 +2,11 @@
 
 ## 1. Goal of the lab
 
-Given a computer equipped with a packet capture library (e.g., `libpcap`), write a C program that parses the packet and extracts minimal information.
+Given a computer equipped with a packet capture library (e.g., `libpcap`), write a program in C that parses each packet and extracts some basic information about the protocols contained in there.
 
-This lab is divided in three steps of increasing complexity.
+This lab is structured in three steps of increasing complexity.
 
-### Step 1: Parsing of standard protocol headers
+### Step 1: Parsing common protocol headers (Ethernet, IP, TCP) 
 
 In this first step, the program must:
 
@@ -92,7 +92,9 @@ void packet_handler(u_char *param, const struct pcap_pkthdr *header, const u_cha
 ```
 
 ### Step 2: Add HTTP parsing
-- Checks if the TCP destination port of the packet is equal to `80`; in this case:
+
+In this second step, add the code that checks if the TCP destination port of the packet is equal to `80`.
+In this case:
   - Check if the packet contains an HTTP request (e.g., a `POST`/`GET` command);
   - In this case, extract the URL contained in the packet (e.g., `www.cnn.com/weather`) and print it on screen, after the data mentioned before.
 
