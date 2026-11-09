@@ -1,0 +1,16 @@
+[package]
+name = "network-monitoring-ebpf-rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+libbpf-rs = "0.25"
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+nix = { version = "0.30", features = ["net"] }
+ctrlc = "3.5"
+
+[build-dependencies]
+libbpf-cargo = "0.25"
+vmlinux = { git = "https://github.com/libbpf/vmlinux.h.git", rev = "8f91e9fd5b488ff57074e589e3960940f3387830" }
+bindgen = "0.72"

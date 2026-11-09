@@ -1,0 +1,6 @@
+[submodule "eBPF-monitoring/initial-application-c/libbpf"]
+	path = eBPF-monitoring/initial-application-c/libbpf
+	url = https://github.com/libbpf/libbpf.git
+[submodule "eBPF-monitoring/initial-application-c/bpftool"]
+	path = eBPF-monitoring/initial-application-c/bpftool
+	url = https://github.com/libbpf/bpftool.git
