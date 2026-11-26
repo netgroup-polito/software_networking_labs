@@ -1,4 +1,4 @@
-# Fundamentals of Virtual Networking: Namespaces, virtual switches and tunnels
+# Virtual Networking: Namespaces, Virtual Switches and Tunnels
 
 
 ## 1. Introduction
@@ -152,8 +152,6 @@ sudo ovs-vsctl emer-reset
 #   all the IP configuration possibly associated to that bridge.
 sudo ovs-vsctl del-br ovs-br0
 ```
-
----
 
 ## 3. Connecting two Linux namespaces
 
@@ -358,7 +356,6 @@ The script [`snippets/3-optional-openvswitch.sh`](snippets/3-optional-openvswitc
 > [!IMPORTANT]
 > Before moving to Section 4, go back to the Linux Bridge: delete the OvS bridge (`sudo ovs-vsctl del-br ovs-br0`) and recreate `br0` as described in [Section 3.2](#32-building-the-topology-the-linux-bridge).
 
----
 
 ## 4. Connecting two Linux namespaces through a third namespace
 
@@ -530,7 +527,7 @@ sudo ip netns exec ns1 ping 10.255.1.1
 ```
 
 **Suggestion**: the problem is related to the routing tables of the edge namespaces, which do not have any route towards the remote network.
-Play with the `ip route` command, which has the following syntax[^netns-exec], and verify that the network topology now works as expected:
+Play with the `ip route` command, which has the following syntax, and verify that the network topology now works as expected:
 
 ```bash
 sudo ip route add {NETWORK/MASK} via {GATEWAY_IP}
@@ -538,7 +535,8 @@ sudo ip route add {NETWORK/MASK} via {GATEWAY_IP}
 sudo ip route add 10.10.10.0/24 via 10.10.10.254
 ```
 
-[^netns-exec]: Remember to prepend `sudo ip netns exec <namespace>` whenever you want to execute a command in a namespace.
+> [!TIP]
+> Remember to prepend `sudo ip netns exec <namespace>` whenever you want to execute a command in a namespace.
 
 <details>
 <summary>Solution (click to expand)</summary>
@@ -670,7 +668,6 @@ Verify that the communication between the two namespaces works, issuing a `ping`
 The script [`snippets/4-optional-openvswitch-openflow.sh`](snippets/4-optional-openvswitch-openflow.sh) builds the configurations of this section at once.
 To clean up, delete the three namespaces as in [Section 4.4](#44-cleaning-up-the-lab), the remaining `veth` pairs (`sudo ip link del veth0-root`, …) and the OvS bridge (`sudo ovs-vsctl del-br ovs-br0`).
 
----
 
 ## 5. Connecting two Linux namespaces on different hosts with GRE tunnels
 
@@ -882,15 +879,16 @@ Now, both namespaces should be able to ping the default gateway (i.e., `10.255.0
 
 Yet, when trying to reach external destinations (e.g., `130.192.225.102`), you should see no response. The problem is the missing NAT configuration: if you capture the packets on the physical NIC of the server, you can see the requests being sent out, but their source IP address is the one of the network namespace, which is private; hence, the answers will never come back.
 
-Let's add the NAT rule, which maps the private IP addresses of the namespaces to the *"public"* address of the host through a `MASQUERADE` rule[^nftables]:
+Let's add the NAT rule, which maps the private IP addresses of the namespaces to the *"public"* address of the host through a `MASQUERADE` rule:
 
 ```bash
 sudo iptables -t nat -A POSTROUTING --source 10.255.0.0/24 -j MASQUERADE
 ```
 
-[^nftables]: On recent distributions (e.g., Ubuntu 22.04 and later), the `iptables` command is a compatibility front-end that translates the rules into *nftables*, the current firewall framework of Linux. The commands of this laboratory work unchanged; you can also see the resulting rules with `sudo nft list ruleset`.
-
 Both network namespaces should now be able to contact external destinations, as confirmed by a successful ping to `8.8.8.8`.
+
+> [!NOTE]
+> On recent distributions (e.g., Ubuntu 22.04 and later), the `iptables` command is a compatibility front-end that translates the rules into *nftables*, the current firewall framework of Linux. The commands of this laboratory work unchanged; you can also see the resulting rules with `sudo nft list ruleset`.
 
 > [!NOTE]
 > DNS resolution may not work inside network namespaces, as by default Ubuntu uses `systemd-resolved` (check the content of `/etc/resolv.conf`). This service listens on `127.0.0.53:53`, which can only be reached from the root namespace.
@@ -1032,7 +1030,6 @@ In case something still does not work properly, as a last resort you can use the
 
 Run the two scripts at the same time, and press ENTER on both hosts to move from one step to the next.
 
----
 
 ## 6. Optional: from network namespaces to containers
 
