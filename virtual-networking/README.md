@@ -1,4 +1,4 @@
-# Virtual Networking: Namespaces, virtual switches and tunnels
+# Virtual Networking: Namespaces, Virtual Switches and Tunnels
 
 
 ## 1. Introduction
