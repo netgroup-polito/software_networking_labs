@@ -1,43 +1,31 @@
 # Fundamentals of Virtual Networking: Namespaces, virtual switches and tunnels
 
-*Fulvio Risso, Marco Iorio — Politecnico di Torino*
 
-## Table of contents
-
-1. [Introduction](#1-introduction)
-2. [Background](#2-background)
-   - [2.1 Linux namespaces](#21-linux-namespaces)
-   - [2.2 Software switches](#22-software-switches)
-3. [Connecting two Linux namespaces](#3-connecting-two-linux-namespaces)
-4. [Connecting two Linux namespaces through a third namespace](#4-connecting-two-linux-namespaces-through-a-third-namespace)
-5. [Connecting two Linux namespaces on different hosts with GRE tunnels](#5-connecting-two-linux-namespaces-on-different-hosts-with-gre-tunnels)
-6. [Optional: from network namespaces to containers](#6-optional-from-network-namespaces-to-containers)
-
-Sections marked **Optional** use Open vSwitch or present additional technologies; they can be skipped without affecting the rest of the laboratory.
-
----
 
 ## 1. Introduction
 
 This lab guides the reader through the main **virtual networking** concepts, including **network namespaces**, **software switches**, and **tunnels**. These elements constitute the basic building blocks necessary to create complex virtual networks within Linux hosts, e.g., to provide network connectivity between Docker containers, as in the Kubernetes scenario.
 
 The laboratory is organized as follows.
-First, [Chapter 2](#2-background) provides some background information about the two concepts leveraged throughout this laboratory: namespaces and software switches.
-In [Chapter 3](#3-connecting-two-linux-namespaces), you will start playing with the above two components, partitioning the network stack of a host in different logical (but completely independent) portions by means of network namespaces, and allowing them to communicate through a software switch.
-Then, [Chapter 4](#4-connecting-two-linux-namespaces-through-a-third-namespace) explores some more complex scenarios, characterized by a third network namespace that interconnects the other two.
-Finally, [Chapter 5](#5-connecting-two-linux-namespaces-on-different-hosts-with-gre-tunnels) focuses on the interconnection of network namespaces located on two different hosts, through the creation of an overlay network by means of `GRE` tunnels.
-The optional [Chapter 6](#6-optional-from-network-namespaces-to-containers) shows that Docker containers are connected to the network with exactly the same building blocks.
+First, [Section 2](#2-background) provides some background information about the concepts leveraged throughout this laboratory: namespaces, virtual Ethernet links and software switches.
+In [Section 3](#3-connecting-two-linux-namespaces), you will start playing with the above two components, partitioning the network stack of a host in different logical (but completely independent) portions by means of network namespaces, and allowing them to communicate through a software switch.
+Then, [Section 4](#4-connecting-two-linux-namespaces-through-a-third-namespace) explores some more complex scenarios, characterized by a third network namespace that interconnects the other two.
+Finally, [Section 5](#5-connecting-two-linux-namespaces-on-different-hosts-with-gre-tunnels) focuses on the interconnection of network namespaces located on two different hosts, through the creation of an overlay network by means of `GRE` tunnels.
+The optional [Section 6](#6-optional-from-network-namespaces-to-containers) shows that Docker containers are connected to the network with exactly the same building blocks.
 
 All the commands are meant to be executed on a Linux host (e.g., a CrownLabs virtual machine) with administrative privileges.
-For each chapter, the `snippets` folder contains a script that builds the whole configuration at once.
+For each section, the `snippets` folder contains a script that builds the whole configuration at once.
 
----
+Notes:
+- Sections marked **Optional** use Open vSwitch or present additional technologies; they can be skipped without affecting the rest of the laboratory.
+- Sections 2-4 can be completed using a single machine (e.g., the *Software Networking* VM on CrownLabs), while Section 5 requires two machines (e.g., two *Software Networking* VMs running in parallel).
+
 
 ## 2. Background
 
 ### 2.1 Linux namespaces
 
-Quoting [Wikipedia](https://en.wikipedia.org/wiki/Linux_namespaces), "*Linux namespaces* are a feature of the Linux kernel that partitions kernel resources such that one set of processes sees one set of resources while another set of processes sees a different set of resources".
+*Linux namespaces are a feature of the Linux kernel that partitions kernel resources such that one set of processes sees one set of resources while another set of processes sees a different set of resources* ([Wikipedia](https://en.wikipedia.org/wiki/Linux_namespaces)).
 In other words, they enable the creation of distinct virtual environments with respect to a given type of kernel resource, so that different namespaces have a completely independent view of it.
 For instance, two `network` namespaces are associated with independent networking stacks, virtual interfaces, IP addresses, routing tables and so on.
 
@@ -52,9 +40,35 @@ In other words, each `NET` namespace is characterized by its own set of IP addre
 Whenever a new network namespace is created, it contains only a loopback interface.
 Afterwards, you can attach either physical or virtual interfaces to the newly created namespace (each network interface is present in exactly one namespace).
 
-### 2.2 Software switches
+### 2.2 Virtual Ethernet links
 
-A *software switch* implements switching functions, either traditional layer 2 forwarding or OpenFlow, within a Linux environment.
+A *virtual Ethernet link* (`veth`) is a pair of virtual network interfaces connected to each other, which behaves like an Ethernet cable with a network card at each end (Figure 2.1): every frame sent into one end is immediately received on the other end, and vice versa.
+
+Analyzing the behavior of the Linux network stack, a packet exiting from a network namespace is delivered to the output NIC `veth` driver, which accepts the packet and confirm that the data has been sent out correctly.
+Immeadiately after, this software module (this time, acting as input NIC `veth` driver, which corresponds to the other end of the virtual wire) tells Linux that a new packet has arrived and needs to be delivered to the operating system. This can be achieved with one of the available notification mechanisms, such as raising an interrupt, hence bringing again the packet into the Linux network stack for the next steps.
+
+The two ends are created (and deleted) together, and each of them is a regular network interface: it has its own MAC address, it can be assigned an IP address, and it can be attached to a software switch.
+
+<p align="center"><img src="img/veth-pair.svg" width="40%" alt="A veth pair: two virtual interfaces connected by a virtual wire"></p>
+<p align="center"><em>Figure 2.1: A virtual Ethernet pair (<code>veth</code>).</em></p>
+
+The key property of a `veth` pair is that its two ends can be placed in **different network namespaces**. Hence, `veth` pairs are the standard way to connect a network namespace to the outside world: one end is moved into the namespace, while the other end remains in the root namespace (or in another namespace), where it is typically attached to a software switch.
+This is exactly how Docker containers and Kubernetes pods are connected to the network of their host.
+
+```bash
+# Create a veth pair, whose ends are called 'veth0-end0' and 'veth0-end1'
+sudo ip link add veth0-end0 type veth peer name veth0-end1
+
+# Show the two ends ('@' indicates the peer interface)
+ip link show type veth
+
+# Deleting one end automatically deletes the whole pair
+sudo ip link del veth0-end0
+```
+
+### 2.3 Software switches
+
+A *software switch* implements switching functions, either traditional layer 2 forwarding or OpenFlow-based, within a Linux environment.
 It connects different entities (e.g., network namespaces or virtual machines) through a virtual network operating at the data-link layer, hence behaving like a traditional Ethernet switch.
 
 Just like its physical counterpart, a virtual switch does more than just forward data packets: it also implements the *backward learning* algorithm, *VLANs*, the *Spanning Tree Protocol*, and so on.
@@ -62,7 +76,7 @@ Optionally, software switches may also support the configuration through *OpenFl
 
 Two well-known software switches are the *Linux Bridge* and *Open vSwitch (OvS)*. The former is part of every standard Linux installation, and it excels in terms of simplicity and reliability: **it is the switch used in the main parts of this laboratory**. Open vSwitch is an open-source project that provides more advanced features, including the support for OpenFlow and for more tunneling protocols; it is used only in the optional parts.
 
-#### 2.2.1 The Linux Bridge
+#### 2.3.1 The Linux Bridge
 
 A Linux Bridge is created, configured and deleted with the same `ip link` command used for any other network interface; the `bridge` command shows (and modifies) its bridging-specific state:
 
@@ -85,7 +99,7 @@ sudo ip link del br0
 
 The Spanning Tree Protocol is disabled by default on the Linux Bridge; remember this aspect if you build a bridged topology that contains loops.
 
-#### 2.2.2 Optional: Open vSwitch (OvS)
+#### 2.3.2 Optional: Open vSwitch (OvS)
 
 Open vSwitch is a multilayer software switch, which implements a production-quality switching platform supporting standard management interfaces and opening the forwarding functions to programmatic extension and control.
 It is well suited to function as a virtual switch in virtualized environments and was designed to support traffic distribution across multiple physical servers.
@@ -146,7 +160,7 @@ We will use a Linux Bridge; the optional [Section 3.5](#35-optional-replacing-th
 The topology that we are going to create is depicted in Figure 3.1: two namespaces called `ns1` and `ns2` are connected through a software switch.
 The connection towards the virtual switch is implemented by means of virtual Ethernet pairs (`veth`).
 
-<p align="center"><img src="img/two-namespaces-switch-root.png" width="60%" alt="Two namespaces connected through a Linux Bridge in the root namespace"></p>
+<p align="center"><img src="img/two-namespaces-switch-root.svg" width="60%" alt="Two namespaces connected through a Linux Bridge in the root namespace"></p>
 <p align="center"><em>Figure 3.1: Two namespaces connected through a virtual switch in the root namespace.</em></p>
 
 ### 3.1 Building the topology: network namespaces
@@ -183,7 +197,7 @@ sudo ip netns exec ns1 ping 127.0.0.1
 > If the loopback device is *down*, you can ping neither the loopback address nor any other address configured in the namespace (e.g., the address `10.255.0.1` that will be configured in the following), as all local traffic is delivered through the loopback device.
 
 Now, we need to connect the `ns1` namespace to the "root namespace".
-To this end, we create a Virtual Ethernet device (`veth`): a pair of virtual interfaces that behave like the two ends of a cable, possibly placed in different namespaces.
+To this end, we create a Virtual Ethernet device (`veth`, see [Section 2.2](#22-virtual-ethernet-links)): a pair of virtual interfaces that behave like the two ends of a cable, possibly placed in different namespaces.
 Whatever is sent into one end comes out of the other end, allowing the traffic to cross the namespace border.
 
 To proceed, let's create the new `veth` pair and push one end into the desired namespace:
@@ -341,7 +355,7 @@ The script [`snippets/3-optional-openvswitch.sh`](snippets/3-optional-openvswitc
 
 In the second part of this laboratory, we connect two network namespaces through an intermediate Linux Bridge running in a third network namespace. The first topology to be reproduced is depicted in Figure 4.1. Then, we explore different variations of this scenario, modifying how the three namespaces are interconnected.
 
-<p align="center"><img src="img/two-namespaces-switch-third-ns-vlan.png" width="100%" alt="Two namespaces connected through a virtual switch in a third namespace, with VLANs"></p>
+<p align="center"><img src="img/two-namespaces-switch-third-ns-vlan.svg" width="100%" alt="Two namespaces connected through a virtual switch in a third namespace, with VLANs"></p>
 <p align="center"><em>Figure 4.1: Two namespaces connected through a virtual switch in a third namespace (VLAN).</em></p>
 
 We start from the configuration of [Chapter 3](#3-connecting-two-linux-namespaces), i.e., the two namespaces `ns1` and `ns2` connected to the Linux Bridge `br0` in the root namespace.
@@ -425,7 +439,7 @@ In case something does not work, use `tcpdump` or `wireshark` to identify where 
 In this section, we modify again the topology, directly interconnecting the three namespaces (i.e., removing the bridge in the root namespace), as depicted in Figure 4.2.
 Overall, this configuration looks simpler than the previous one, since it does not require a virtual switch in the root namespace.
 
-<p align="center"><img src="img/two-namespaces-switch-third-ns-direct.png" width="100%" alt="Two namespaces connected directly to a virtual switch in a third namespace"></p>
+<p align="center"><img src="img/two-namespaces-switch-third-ns-direct.svg" width="100%" alt="Two namespaces connected directly to a virtual switch in a third namespace"></p>
 <p align="center"><em>Figure 4.2: Two namespaces connected through a virtual switch in a third namespace (direct connections).</em></p>
 
 To implement the direct interconnection, we first get rid of the root bridge, as well as of the `veth` pairs connected to the `ns-br` namespace:
@@ -468,7 +482,7 @@ In the topologies considered up to now, the interfaces of the two *edge* namespa
 We now consider a different scenario, with the two namespaces in different IP networks (Figure 4.3). Thus, the third namespace has to operate at L3, i.e., it has to route packets.
 Routing is performed by the IP forwarding function of the Linux kernel, which forwards packets according to the routing table of the namespace: no additional routing process is needed (a routing process, such as a routing protocol daemon, would only be needed to compute the routing table automatically).
 
-<p align="center"><img src="img/two-namespaces-router-third-ns-direct.png" width="100%" alt="Two namespaces connected through a router in a third namespace"></p>
+<p align="center"><img src="img/two-namespaces-router-third-ns-direct.svg" width="100%" alt="Two namespaces connected through a router in a third namespace"></p>
 <p align="center"><em>Figure 4.3: Two namespaces connected through a router in a third namespace.</em></p>
 
 To reproduce the desired topology, we start by changing the address of `ns2`, to make it belong to a different IP network:
@@ -551,7 +565,7 @@ In case something still does not work properly, as a last resort you can use the
 
 This optional section builds the topology of Figure 4.1 with an Open vSwitch bridge (`ovs-br0`) in the root namespace, instead of the Linux Bridge, and then replaces the VLAN configuration with OpenFlow rules (Figure 4.4).
 
-<p align="center"><img src="img/two-namespaces-switch-third-ns-openflow.png" width="100%" alt="Two namespaces connected through a virtual switch in a third namespace, with OpenFlow rules"></p>
+<p align="center"><img src="img/two-namespaces-switch-third-ns-openflow.svg" width="100%" alt="Two namespaces connected through a virtual switch in a third namespace, with OpenFlow rules"></p>
 <p align="center"><em>Figure 4.4: Two namespaces connected through a virtual switch in a third namespace (OpenFlow).</em></p>
 
 #### 4.6.1 VLANs with Open vSwitch
@@ -649,7 +663,7 @@ To clean up, delete the three namespaces as in [Section 4.4](#44-cleaning-up-the
 
 In the last part of this laboratory, we further extend the network topology by interconnecting Linux namespaces hosted on different servers with `GRE` tunnels.
 
-<p align="center"><img src="img/two-namespaces-gre-ethernet.png" width="100%" alt="Two namespaces on different hosts connected through an L2 GRE tunnel"></p>
+<p align="center"><img src="img/two-namespaces-gre-ethernet.svg" width="100%" alt="Two namespaces on different hosts connected through an L2 GRE tunnel"></p>
 <p align="center"><em>Figure 5.1: Two namespaces on different hosts connected through a GRE tunnel (L2).</em></p>
 
 This scenario, represented in Figure 5.1, mimics a datacenter infrastructure composed of multiple servers, which host the environments (e.g., VMs or containers) of different tenants.
@@ -672,12 +686,10 @@ This section describes what `GRE` tunnels are and the path that packets follow i
 Generic Routing Encapsulation (`GRE`) is a simple tunneling protocol that can encapsulate a variety of protocols inside point-to-point links over an IP network. One of the main strengths of `GRE` is its simplicity, as it requires no connection establishment before sending data.
 `GRE` does not provide any encryption of the payload; hence, in a real scenario, it may be used together with L3 encryption, such as IPsec.
 
-Among the different supported protocols, `GRE` can encapsulate either an IP packet or an entire Ethernet frame. In Linux, the first type of tunnel interface is called `gre` (*IP in GRE*), while the second one is called `gretap` (*Ethernet in GRE*). The two frame layouts are represented in Figure 5.2[^gre-figure].
+Among the different supported protocols, `GRE` can encapsulate either an IP packet or an entire Ethernet frame. In Linux, the first type of tunnel interface is called `gre` (*IP in GRE*), while the second one is called `gretap` (*Ethernet in GRE*). The two frame layouts are represented in Figure 5.2.
 
-<p align="center"><img src="img/gre-encapsulation.png" width="60%" alt="Frame layout of gre vs gretap"></p>
+<p align="center"><img src="img/gre-encapsulation.svg" width="100%" alt="Frame layout of gre vs gretap"></p>
 <p align="center"><em>Figure 5.2: Frame layout of a <code>gre</code> (IP in GRE) vs. a <code>gretap</code> (Ethernet in GRE) tunnel.</em></p>
-
-[^gre-figure]: Figure from <https://medium.com/@david.waiting/a-beginners-guide-to-generic-routing-encapsulation-fb2b4fb63abb>.
 
 #### 5.1.2 Namespace to namespace connectivity through the GRE tunnel
 
@@ -854,19 +866,19 @@ Both network namespaces should now be able to contact external destinations, as 
 > echo 'nameserver 10.96.0.10' | sudo tee /etc/netns/h1-ns/resolv.conf
 > ```
 
-### 5.3 Summary of the L2 configuration
+#### 5.2.6 Summary of the L2 configuration
 
 At this point, each host runs a namespace connected to a Linux Bridge, the two bridges are connected through a `gretap` tunnel, the namespaces use a reduced MTU, and `h1` acts as default gateway and NAT for both namespaces.
-The script of [Section 5.7](#57-full-configuration) reproduces this configuration on each host.
+The script of [Section 5.6](#56-full-configuration) reproduces this configuration on each host.
 
-### 5.4 Leveraging an L3 GRE tunnel to interconnect the two namespaces
+### 5.3 Leveraging an L3 GRE tunnel to interconnect the two namespaces
 
 In the previous section, we created a `gretap` (i.e., an L2 tunnel) to interconnect two namespaces located on different hosts. Now, we explore a different alternative, creating a `gre` tunnel, which operates at L3 (i.e., it encapsulates IP packets). The reference scenario is represented in Figure 5.3. Please notice that the two namespaces now belong to different IP networks (`10.255.0.0/24` and `10.255.1.0/24` respectively), and each virtual switch is the default gateway for its network.
 
-<p align="center"><img src="img/two-namespaces-gre-ip.png" width="100%" alt="Two namespaces on different hosts connected through an L3 GRE tunnel"></p>
+<p align="center"><img src="img/two-namespaces-gre-ip.svg" width="100%" alt="Two namespaces on different hosts connected through an L3 GRE tunnel"></p>
 <p align="center"><em>Figure 5.3: Two namespaces on different hosts connected through a GRE tunnel (L3).</em></p>
 
-#### 5.4.1 Building the topology
+#### 5.3.1 Building the topology
 
 Starting from the scenario of the previous section, modify the configuration to obtain the topology depicted in Figure 5.3:
 
@@ -878,7 +890,7 @@ Starting from the scenario of the previous section, modify the configuration to 
 
 You should be able to perform these modifications by adapting the commands used in the previous sections. At the end, each namespace should be able to ping external destinations, while a ping between the two namespaces fails, as we have not yet created the tunnel interface. As always, use `tcpdump` or `wireshark` to troubleshoot possible problems.
 
-#### 5.4.2 Creating the tunnel interface
+#### 5.3.2 Creating the tunnel interface
 
 To interconnect the two network namespaces, we still need to create the `gre` tunnel:
 
@@ -931,7 +943,7 @@ You can use `tcpdump` or `wireshark` to observe the `gre` tunnel at work: when c
 >
 > With the L2 tunnel, instead, the packets were silently dropped by the bridge. Restore the MTU of 1462 bytes before continuing.
 
-### 5.5 Optional: replacing GRE with VXLAN
+### 5.4 Optional: replacing GRE with VXLAN
 
 GRE is simple, but most datacenters and Kubernetes network plugins (e.g., Flannel, or Calico in VXLAN mode) use *VXLAN* (Virtual eXtensible LAN) to build L2 overlays. VXLAN encapsulates Ethernet frames in UDP datagrams (destination port 4789), and identifies each virtual network with a 24-bit *VXLAN Network Identifier* (VNI), allowing up to 16 million isolated networks, instead of the 4094 available with VLANs.
 
@@ -951,7 +963,7 @@ The namespaces should be able to ping each other again. Now, check the MTU of th
 
 Finally, capture the traffic on the physical NIC with `tcpdump -n -i NIC_HOST_1 udp port 4789`, or with `wireshark`, which decodes the VXLAN header and shows the VNI.
 
-### 5.6 Cleaning up the lab
+### 5.5 Cleaning up the lab
 
 To reset the environment and restart from scratch, delete the different components we created:
 
@@ -971,7 +983,7 @@ sudo ip link del dev tun0
 sudo iptables -t nat -D POSTROUTING --source 10.255.1.0/24 -j MASQUERADE
 ```
 
-### 5.7 Full configuration
+### 5.6 Full configuration
 
 In case something still does not work properly, as a last resort you can use the following two scripts, which build the L2 (`gretap`) configuration and then replace it with the L3 (`gre`) one, and also clean up the environment when they terminate. Remember to adapt the variables at the beginning of each script (IP addresses and NIC name).
 
@@ -1009,8 +1021,4 @@ docker rm -f web
 
 Kubernetes networking plugins follow the same principles: each pod has its own network namespace connected through a `veth` pair, and pods on different nodes are interconnected through routing or through overlays such as VXLAN, as in [Chapter 5](#5-connecting-two-linux-namespaces-on-different-hosts-with-gre-tunnels).
 
----
 
-## License
-
-This work is licensed under a [Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License](https://creativecommons.org/licenses/by-nc-sa/3.0/).
