@@ -4,3 +4,4 @@ This repository contains the labs for the Software Networking course at Politecn
 
 - Lab 1: [HTTP Processing with libpcap](HTTP-processing/)
 - Lab 2: [Network Monitoring with eBPF](eBPF-monitoring/)
+- Lab 3: [Virtual Networking: Namespaces, virtual switches and tunnels](virtual-networking/)
