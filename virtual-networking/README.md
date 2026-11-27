@@ -1001,6 +1001,9 @@ The namespaces should be able to ping each other again. Now, check the MTU of th
 
 Finally, capture the traffic on the physical NIC with `tcpdump -n -i NIC_HOST_1 udp port 4789`, or with `wireshark`, which decodes the VXLAN header and shows the VNI.
 
+> [!NOTE]
+> The previous configuration referred to a VXLAN in *point-to-point* mode. However, usually VXLAN is deployed in *multicast* mode, where a single interface (VTEP) allows the virtual bridge to connect to all the other virtual bridges operating on the infrastructure, hence adopting a *hub-and-spoke* topology (instead of *full-mesh*). However, this mode requires the support for multicast in the underlying infrastructure, which is not always available (e.g., CrownLabs does not support multicast).
+
 ### 5.5 Cleaning up the lab
 
 To reset the environment and restart from scratch, delete the different components we created:
